@@ -6,7 +6,8 @@
 #include <vector>
 #define MIN INT32_MIN
 #define MAX INT32_MAX
-struct Point {
+class Point {
+ public:
   int x, y;
   Point() : x(0), y(0) {}
   Point(int x, int y) : x(x), y(y) {}
@@ -18,29 +19,25 @@ struct Point {
   Point operator-(const Point& rhs) const {
     return Point(x - rhs.x, y - rhs.y);
   }
+  Point& operator=(const Point& rhs) {
+    x = rhs.x;
+    y = rhs.y;
+    return *this;
+  }
 };
 
-int player;
+const int player; 
 const int SIZE = 8;
+size_t empty_blocks;
 std::array<std::array<int, SIZE>, SIZE> board;
 std::vector<Point> next_valid_spots;
-std::vector<Point> alpha_next_valid_points;
-std::vector<Point> beta_next_valid_points;
+
 const std::array<Point, 8> directions{
     {Point(-1, -1), Point(-1, 0), Point(-1, 1), Point(0, -1),
      /*{0, 0}, */ Point(0, 1), Point(1, -1), Point(1, 0), Point(1, 1)}};
 
 bool is_point_on_board(Point p) {
   return 0 <= p.x && p.x < SIZE && 0 <= p.y && p.y < SIZE;
-}
-
-bool is_last_point() {
-  for (int i = 0; i < SIZE; i++) {
-    for (int j = 0; j < SIZE; j++) {
-      if (board[i][j] == 0) return false;
-    }
-  }
-  return true;
 }
 
 bool is_point_valid(Point& center, bool alpha) {
@@ -57,7 +54,7 @@ bool is_point_valid(Point& center, bool alpha) {
   for (Point dir : directions) {
     // Move along the direction while testing.
     Point p = center + dir;
-    if (!(board[p.x][p.y] == nxt_player)) continue;
+    if (board[p.x][p.y] != nxt_player) continue;
     p = p + dir;
     while (is_point_on_board(p) && board[p.x][p.y] != 0) {
       if (board[p.x][p.y] == cur_player) return true;
@@ -67,7 +64,7 @@ bool is_point_valid(Point& center, bool alpha) {
   return false;
 }
 
-void get_valid_points(bool alpha) {
+std::vector<Point> get_valid_points(bool alpha) {
   if (alpha) {
     for (int i = 0; i < SIZE; i++) {
       for (int j = 0; j < SIZE; j++) {
@@ -87,62 +84,75 @@ void get_valid_points(bool alpha) {
   }
 }
 
-int heuristic() {
-  int alpha_option, beta_option;
-  int alpha_on_the_board = 0;
-  int beta_on_the_board = 0;
+int heuristic(size_t alpha_size, size_t beta_size) {
+  size_t& alpha_option = alpha_size;
+  size_t& beta_option = beta_size;
+  size_t alpha_on_the_board = 0;
+  size_t beta_on_the_board = 0;
 
-  get_valid_points(true);
-  alpha_option = alpha_next_valid_points.size();
+  for (size_t i = 0; i < SIZE; i++)
+    for (ssize_t j = 0; j < SIZE; j++)
+      if (board[i][j] == player)
+        alpha_on_the_board++;
+      else if (board[i][j] == 3 - player)
+        beta_on_the_board++;
 
-  get_valid_points(false);
-  beta_option = beta_next_valid_points.size();
-
-  for (int i = 0; i < SIZE; i++)
-    for (int j = 0; j < SIZE; j++)
-      if (board[i][j] == player) alpha_on_the_board++;
-      else if (board[i][j] == 3 - player) beta_on_the_board++;
-
-  return alpha_option * 0 - beta_option * 1 + (alpha_on_the_board * 3 - beta_on_the_board * 1);
+  return alpha_option * 1 - beta_option * 3 +
+         (alpha_on_the_board * 5 - beta_on_the_board * 0);
 }
 
 int alpha_beta(Point p, int depth, int alpha, int beta, bool maxPlayer) {
   board[p.x][p.y] = player;
+  empty_blocks--;
   int value;
-  if (depth == 0 || is_last_point()) {
-    value = heuristic();
+  if (depth == 0 || empty_blocks == 0) {
+    auto alpha_next_valid_points = get_valid_points(true);
+    auto beta_next_valid_points = get_valid_points(false);
+    value = heuristic(alpha_next_valid_points.size(), beta_next_valid_points.size());
     board[p.x][p.y] = 0;
+    empty_blocks++;
     return value;
   }
-
   if (maxPlayer) {
+    std::vector<Point> alpha_next_valid_points;
     value = MIN;
-    get_valid_points(true);  // get valid for alpha player
+    alpha_next_valid_points = get_valid_points(true);  // get valid for alpha player
     for (auto np : alpha_next_valid_points) {
-      value = std::max(value, alpha_beta(np, depth - 1, alpha, beta, false));
+      if (alpha_next_valid_points.size() > 10 && depth > 2)
+        value = std::max(value, alpha_beta(np, depth - 2, alpha, beta, false));
+      else
+        value = std::max(value, alpha_beta(np, depth - 1, alpha, beta, false));
       alpha = std::max(alpha, value);
       if (alpha >= beta) break;
     }
+    if (!alpha_next_valid_points.empty()) alpha_next_valid_points.clear();
   } else {
+    std::vector<Point> beta_next_valid_points;
     value = MAX;
-    get_valid_points(false);  // get valid for beta player
+    beta_next_valid_points = get_valid_points(false);  // get valid for beta player
     for (auto np : beta_next_valid_points) {
-      value = std::min(value, alpha_beta(np, depth - 1, alpha, beta, true));
+      if (beta_next_valid_points.size() > 10 && depth > 2)
+        value = std::min(value, alpha_beta(np, depth - 2, alpha, beta, true));
+      else
+        value = std::min(value, alpha_beta(np, depth - 1, alpha, beta, true));
       beta = std::min(beta, value);
       if (alpha >= beta) break;
     }
+    if (!beta_next_valid_points.empty()) beta_next_valid_points.clear();
   }
-  alpha_next_valid_points.clear();
-  beta_next_valid_points.clear();
   board[p.x][p.y] = 0;
+  empty_blocks++;
   return value;
 }
 
 void read_board(std::ifstream& fin) {
   fin >> player;
+  empty_blocks = 0;
   for (int i = 0; i < SIZE; i++) {
     for (int j = 0; j < SIZE; j++) {
       fin >> board[i][j];
+      if (board[i][j] == 0)
+        empty_blocks++;
     }
   }
 }
@@ -151,27 +161,31 @@ void read_valid_spots(std::ifstream& fin) {
   int n_valid_spots;
   fin >> n_valid_spots;
   int x, y;
-  for (int i = 0; i < n_valid_spots; i++) {
+  for (size_t i = 0; i < n_valid_spots; i++) {
     fin >> x >> y;
-    next_valid_spots.push_back({x, y});
+    next_valid_spots.push_back(Point(x, y));
   }
 }
 
 void write_valid_spot(std::ofstream& fout) {
   int value, child;
   int alpha, beta;
-  Point p = next_valid_spots[0];
+  Point p;
   value = MIN, child = MIN, alpha = MIN, beta = MAX;
-  for (auto np : next_valid_spots) {
-    // max_player's point of view
-    // race between depth(4) and depth(5), 4 wins always.
-    child = alpha_beta(np, 4, alpha, beta, false);
-    // std::cout << child << std::endl;
-    if (child > value) {
-      value = child;
-      p = np;
-      fout << np.x << " " << np.y << std::endl;
-      fout.flush();
+  if (next_valid_spots.size() == 1)
+    p = next_valid_spots[0];
+  else {
+    for (auto np : next_valid_spots) {
+      // max_player's point of view
+      // race between depth(4) and depth(5), 4 wins always.
+      child = alpha_beta(np, 4, alpha, beta, false);
+      alpha = std::max(alpha, child);
+      if (child > value) {
+        value = child;
+        p = np;
+        fout << np.x << " " << np.y << std::endl;
+        fout.flush();
+      }
     }
   }
   // Keep updating the output until getting killed.
