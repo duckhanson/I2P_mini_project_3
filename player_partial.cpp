@@ -222,40 +222,9 @@ class OthelloBoard {
     }
     return danger;
   }
-  int heuristic(int depth) {
-    size_t alpha_option;
-    size_t beta_option;
-    if (cur_player == player) {
-      alpha_option = next_valid_spots.size();
-      cur_player = get_next_player(cur_player);
-      next_valid_spots = get_valid_spots();
-      beta_option = next_valid_spots.size();
-    } else {
-      beta_option = next_valid_spots.size();
-      cur_player = get_next_player(cur_player);
-      next_valid_spots = get_valid_spots();
-      alpha_option = next_valid_spots.size();
-    }
-
+  int heuristic() {
     size_t alpha_on_the_board = disc_count[player];
-    // size_t beta_on_the_board = disc_count[get_next_player(player)];
-
-    // restore
-    cur_player = get_next_player(cur_player);
-    // minimize disc
-    int corner = get_corner();
-    if (corner < 1)  // first state : corner is important
-      return (depth * -1) * 2 + (beta_option) + get_corner() * 7 - get_danger_zone() * 11 + get_stable_spots() * 11;
-    else if (disc_count[EMPTY] > 39)  // second state : get second corner using stable line
-      return (depth / 2) + get_corner() * 5 - get_danger_zone() * 7 +
-             get_stable_spots() * 2;
-    else if (disc_count[EMPTY] > 21)  // third state : stable spread
-      return (depth * -1) * 2 + (alpha_option * 3 - beta_option * 2) / 2 +
-             get_corner() * 3 - get_danger_zone() * 13 +
-             get_stable_spots() * 7;
-    else    // fourth state : get maxium discs
-      return (depth * -1) * 2 + (alpha_on_the_board > 32) * 10 +
-             get_stable_spots() * 4;
+    return alpha_on_the_board;
   }
 
   int alpha_beta(Point p, int depth, int alpha, int beta, bool maxPlayer) {
@@ -267,7 +236,7 @@ class OthelloBoard {
     int value;
     // End of alpha beta.
     if (depth == 0 || cur_size == 1 || is_end_of_the_game()) {
-      value = heuristic(depth);
+      value = heuristic();
       restore_disc(p);
       board = copy_board;
       return value;
